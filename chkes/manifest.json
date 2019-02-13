@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+
+  "name": "CH-Kayako Enhancement Suite",
+  "description": "Small improvements to Kayako.",
+  "version": "1.2",
+  "web_accessible_resources": ["images/*.png", "*.html"],
+
+  "content_scripts": [
+    {
+      "matches": ["https://support.icertified.net/staff/*"],
+      "js": ["jquery-3.1.0.min.js", "hide-note.js", "show-client-info.js", "serveralerts.js", "hotkeys.js"],
+      "css": ["cicss.css"]
+    }
+  ]
+}
