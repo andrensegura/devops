@@ -1,0 +1,108 @@
+#!/bin/bash
+CertbotPath='/root/bin/certbot-auto'
+CertbotFlags='--agree-tos --email=support@icertified.net --apache  certonly --force-renewal -n -d'
+CertbotCMD="${CertbotPath} ${CertbotFlags}"
+
+# ensure we're not on a cPanel server
+if test -e /usr/local/cpanel/LICENSE ; then
+    echo "Not for use on a cPanel server."
+    exit 1
+fi
+
+# Check if certbot-auto is available
+if [ ! -f /root/bin/certbot-auto ]; then
+    echo "-- certbot-auto script not found. Obtaining..."
+    cd /root/bin/
+    wget https://dl.eff.org/certbot-auto
+    chmod a+x certbot-auto
+    mkdir /root/certbot/
+    touch /root/certbot/domains.txt
+    echo "-- certbot-auto script obtained. Please run your command again."
+    echo "-- Your first time running it will take more time than usual."
+    exit;
+fi
+
+
+function renew_all_only {
+    # Get domains to renew from /root/certbot/domains.txt
+    for i in `cat /root/certbot/domains.txt`; do
+    	$CertbotCMD "${i},www.${i}"
+    done
+}
+
+function generate_ssl_vhost {
+    DOMAIN=$1
+    awk -v RS="</VirtualHost>" -v domain="$1" '$0 ~ domain {print $0 RS}' \
+    /etc/httpd/conf/httpd.conf | \
+    awk "/ServerName/{print \"\tSSLEngine on\n\tSSLCertificateFile /etc/letsencrypt/live/$1/fullchain.pem\n\tSSLCertificateKeyFile /etc/letsencrypt/live/$1/privkey.pem\"}1 gsub(/:80/, \":443\");" > /etc/httpd/conf.d/$DOMAIN-ssl-vhost.conf
+}
+
+function issue_new_all {
+    for i in `cat /root/certbot/domains.txt`; do
+        generate_ssl_vhost $i
+    done
+    renew_all_only
+}
+
+function issue_new_single {
+    DOMAIN=$1
+    generate_ssl_vhost $DOMAIN
+    $CertbotCMD $DOMAIN
+}
+
+function help_text {
+    echo "
+
+-Available options:
+    -s|--single         Issue a cert for a single domain. Installs an SSL vhost
+    -a|--issue-all      Issue a cert for all domains. Installs SSL vhosts
+    -r|--renew-all      Renew all existing certificates. Doesn't install vhosts
+    -v|--vhost          Generate a vhost for the domain only
+
+-The first time the script is run, the certbot-auto script is downloaded and
+ setup on the server in /root/bin/.
+ Add the following to the root crontab:
+ @monthly /root/bin/ncple -r > /dev/null 2>&1
+
+-When a domain has an SSL issued, the WWW version is included.
+
+-Store the list of domains that need to be renewed in /root/certbot/domains.txt
+ domains.txt should be a list of domains without WWW, separated by newlines
+
+-The SSL vhost generation requires that the standard HTTP vhost in the apache configuration file has an explicit port 80.
+"
+}
+
+# Parse aguments
+
+while [[ $# -gt 0 ]]; do
+    ARG="$1"
+
+    case $ARG in
+        -s|--single)
+            issue_new_single $2
+            exit
+            ;;
+        -a|--issue-all)
+            issue_new_all
+            exit
+            ;;
+        -r|--renew-all)
+            renew_all_only
+            exit
+            ;;
+        -v|--vhost)
+            generate_ssl_vhost $2
+            exit
+            ;;
+        -h|--help)
+            help_text
+            exit
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+help_text

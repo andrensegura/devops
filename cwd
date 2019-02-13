@@ -1,0 +1,1 @@
+sed -n "/<VirtualHost/h;/<VirtualHost/!H; /<\/VirtualHost/ {x;/$1/p;}" /etc/httpd/conf/httpd.conf | grep DocumentRoot | awk '{print $2}'
